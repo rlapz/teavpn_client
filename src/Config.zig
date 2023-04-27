@@ -34,7 +34,7 @@ pub const Sys = struct {
 pub const Socket = struct {
     type_: Type,
     use_encryption: bool,
-    server_addr: [server_addr_size]u8,
+    server_addr: [server_addr_size - 1:0]u8,
     server_port: u16,
 
     pub const server_addr_size = 64;
@@ -76,7 +76,7 @@ pub const Socket = struct {
 
 pub const Iface = struct {
     override_default: bool,
-    dev: [dev_size]u8,
+    dev: [dev_size - 1:0]u8,
     iff: snet.Iff,
 
     pub const dev_size = snet.ifacenamesize;
@@ -93,8 +93,8 @@ pub const Iface = struct {
 };
 
 pub const Auth = struct {
-    username: [username_size]u8,
-    password: [password_size]u8,
+    username: [username_size - 1:0]u8,
+    password: [password_size - 1:0]u8,
 
     pub const username_size = packet.Auth.username_size;
     pub const password_size = packet.Auth.password_size;
