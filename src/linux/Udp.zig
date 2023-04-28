@@ -102,6 +102,8 @@ fn stateHandshake(self: *Udp) State {
 
     // send "handshake" packet
     const hnsk = &pkt.body.handshake;
+    @memset(@ptrCast([*]u8, hnsk), 0, packet.Handshake.size);
+
     const vers = &hnsk.version;
     vers.major = ver.major;
     vers.patch = ver.patch;

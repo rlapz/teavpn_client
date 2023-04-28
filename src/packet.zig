@@ -94,8 +94,8 @@ pub const Packet = extern struct {
 //
 pub const Handshake = extern struct {
     version: Version,
-    // I don't care about the rest
-    __pad: [Version.size * 2]u8,
+    __resv0: [Version.size]u8,
+    __resv1: [Version.size]u8,
 
     pub const size = @sizeOf(Handshake);
 
@@ -137,7 +137,8 @@ pub const Handshake = extern struct {
 
     comptime {
         assert(@offsetOf(Handshake, "version") == 0);
-        assert(@offsetOf(Handshake, "__pad") == Version.size);
+        assert(@offsetOf(Handshake, "__resv0") == Version.size);
+        assert(@offsetOf(Handshake, "__resv1") == Version.size * 2);
         assert(size == Version.size * 3); // 96
     }
 };
