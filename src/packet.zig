@@ -2,6 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 const fmt = std.fmt;
 const mem = std.mem;
+const os = std.os;
 
 const snet = @import("net.zig");
 const util = @import("util.zig");
@@ -71,13 +72,23 @@ pub const Packet = extern struct {
         pub const size = @sizeOf(Body);
     };
 
-    pub fn set(self: *Packet, code: Code, len: u16) void {
+    pub fn set(self: *Packet, code: Code, len: u16) *Packet {
         self.code = code;
         self.body_len = mem.nativeToBig(u16, len);
+        return self;
     }
 
     pub fn getBodyLen(self: *const Packet) u16 {
         return mem.bigToNative(u16, self.body_len);
+    }
+
+    pub fn udpSend(self: *const Packet, fd: os.socket_t) !usize {
+        const len = header_size + self.getBodyLen();
+        return snet.udp.sendTo(fd, mem.asBytes(self)[0..len]);
+    }
+
+    pub fn udpRecv(self: *Packet, fd: os.socket_t) !usize {
+        return snet.udp.recvFrom(fd, mem.asBytes(self));
     }
 
     comptime {

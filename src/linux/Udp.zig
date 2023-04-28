@@ -9,6 +9,11 @@ const util = @import("../util.zig");
 const Config = @import("../Config.zig");
 
 const Packet = packet.Packet;
+const Handshake = packet.Handshake;
+const HandshakeReject = packet.HandshakeReject;
+const Auth = packet.Auth;
+const AuthResp = packet.AuthResp;
+
 const ver = Config.version;
 
 const Udp = @This();
@@ -86,14 +91,13 @@ inline fn handleState(self: *Udp) !void {
 }
 
 fn stateHandshake(self: *Udp) State {
-    log.info("preparing handshake packet...", .{});
+    const fd = self.sock_fd;
     const pkt = &self.packet.pkt;
-    const raw = &self.packet.raw;
     var buffer: [1024]u8 = undefined;
 
+    log.info("sending `close` packet... (cleaning up stale connections)", .{});
     // send "close" packet, cleaning up stale connection(s)
-    pkt.set(.close, 0);
-    var sz = snet.udp.sendTo(self.sock_fd, raw[0..Packet.header_size]) catch |err| {
+    var sz = pkt.set(.close, 0).udpSend(fd) catch |err| {
         log.err("failed to send `close` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -102,7 +106,7 @@ fn stateHandshake(self: *Udp) State {
 
     // send "handshake" packet
     const hnsk = &pkt.body.handshake;
-    @memset(@ptrCast([*]u8, hnsk), 0, packet.Handshake.size);
+    @memset(@ptrCast([*]u8, hnsk), 0, Handshake.size);
 
     const vers = &hnsk.version;
     vers.major = ver.major;
@@ -112,13 +116,11 @@ fn stateHandshake(self: *Udp) State {
         log.err("failed to set packet version: {s}", .{@errorName(err)});
         return .failed;
     };
-    pkt.set(.handshake, packet.Handshake.size);
 
     log.info("request version: {s}", .{vers.toStr(&buffer)});
+    log.info("sending `handshake` packet...", .{});
 
-    log.info("sending handshake packet...", .{});
-    const hsnk_size = Packet.header_size + packet.Handshake.size;
-    sz = snet.udp.sendTo(self.sock_fd, raw[0..hsnk_size]) catch |err| {
+    sz = pkt.set(.handshake, Handshake.size).udpSend(fd) catch |err| {
         log.err("failed to send `handshake` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -126,8 +128,8 @@ fn stateHandshake(self: *Udp) State {
     log.info("sent bytes: {}", .{sz});
 
     // recv "handshake" packet
-    log.info("receiving handshake packet...", .{});
-    sz = snet.udp.recvFrom(self.sock_fd, raw) catch |err| {
+    log.info("receiving `handshake` packet...", .{});
+    sz = pkt.udpRecv(fd) catch |err| {
         log.err("failed to recv `handshake` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -149,10 +151,10 @@ fn handshakeResponse(self: *Udp) !void {
     switch (pkt.code) {
         .handshake => brk: {
             const rsp_len = pkt.getBodyLen();
-            if (rsp_len != packet.Handshake.size) {
+            if (rsp_len != Handshake.size) {
                 log.err("invalid response packet body length: {}:{}", .{
                     rsp_len,
-                    packet.Handshake.size,
+                    Handshake.size,
                 });
                 break :brk;
             }
@@ -173,7 +175,7 @@ fn handshakeResponse(self: *Udp) !void {
             return;
         },
         .handshake_reject => {
-            log.err("server rejected the handshake request: {s}", .{
+            log.err("server rejected the `handshake` request: {s}", .{
                 pkt.body.handshake_reject.toStr(&buffer),
             });
             return error.HandshakeRejected;
@@ -189,32 +191,27 @@ fn handshakeResponse(self: *Udp) !void {
 }
 
 fn stateAuth(self: *Udp) State {
-    log.info("preparing auth packet...", .{});
-
+    const fd = self.sock_fd;
     const pkt = &self.packet.pkt;
-    const raw = &self.packet.raw;
-    const body = &pkt.body;
 
     // send "auth" packet
-    const auth = &body.auth;
+    const auth = &pkt.body.auth;
     const cfg = &self.config.auth;
     auth.set(cfg.getUsername(), cfg.getPassword()) catch |err| {
         log.err("failed to prepare auth packet: {s}", .{@errorName(err)});
         return .failed;
     };
-    pkt.set(.auth, packet.Auth.size);
 
-    log.info("sending auth packet...", .{});
-    const auth_size = Packet.header_size + packet.Auth.size;
-    var sz = snet.udp.sendTo(self.sock_fd, raw[0..auth_size]) catch |err| {
-        log.err("failed to send auth packet: {s}", .{@errorName(err)});
+    log.info("sending `auth` packet...", .{});
+    var sz = pkt.set(.auth, Auth.size).udpSend(fd) catch |err| {
+        log.err("failed to send `auth` packet: {s}", .{@errorName(err)});
         return .failed;
     };
 
     log.info("sent bytes: {}", .{sz});
 
-    log.info("receiving auth response packet...", .{});
-    sz = snet.udp.recvFrom(self.sock_fd, raw) catch |err| {
+    log.info("receiving `auth` response packet...", .{});
+    sz = pkt.udpRecv(fd) catch |err| {
         log.err("failed to recv `auth` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -233,10 +230,10 @@ fn authResponse(self: *Udp) !void {
     switch (pkt.code) {
         .auth => brk: {
             const rsp_len = pkt.getBodyLen();
-            if (rsp_len != packet.AuthResp.size) {
+            if (rsp_len != AuthResp.size) {
                 log.err("invalid response packet body length: {}:{}", .{
                     rsp_len,
-                    packet.AuthResp.size,
+                    AuthResp.size,
                 });
                 break :brk;
             }
