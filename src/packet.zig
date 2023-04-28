@@ -65,7 +65,7 @@ pub const Packet = extern struct {
         handshake_reject: HandshakeReject,
         auth: Auth,
         auth_resp: AuthResp,
-        raw: [raw_size - 1:0]u8,
+        raw: [raw_size]u8,
 
         pub const raw_size = 4096;
         pub const size = @sizeOf(Body);
@@ -103,7 +103,7 @@ pub const Handshake = extern struct {
         major: u8,
         patch: u8,
         sub: u8,
-        extra: [extra_size - 1:0]u8,
+        extra: [extra_size]u8,
 
         pub const extra_size = 29;
         pub const size = @sizeOf(Version);
@@ -148,7 +148,7 @@ pub const Handshake = extern struct {
 //
 pub const HandshakeReject = extern struct {
     reason: Reason,
-    message: [message_len - 1:0]u8,
+    message: [message_len]u8,
 
     pub const message_len = 511;
     pub const size = @sizeOf(HandshakeReject);
@@ -191,8 +191,8 @@ pub const HandshakeReject = extern struct {
 // Auth
 //
 pub const Auth = extern struct {
-    username: [username_size - 1:0]u8,
-    password: [password_size - 1:0]u8,
+    username: [username_size]u8,
+    password: [password_size]u8,
 
     pub const username_size = 256;
     pub const password_size = 256;

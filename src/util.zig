@@ -13,7 +13,7 @@ const impl = switch (builtin.os.tag) {
 
 pub const setSignalHandler = impl.setSignalHandler;
 
-pub fn cstrToSlice(src: [*:0]const u8, size: usize) []const u8 {
+pub fn cstrToSlice(src: [*]const u8, size: usize) []const u8 {
     var i: usize = 0;
     while (i < size) : (i += 1) {
         if (src[i] == '\x00')
@@ -23,7 +23,7 @@ pub fn cstrToSlice(src: [*:0]const u8, size: usize) []const u8 {
     return src[0..i];
 }
 
-pub fn ctstrLen(src: [*:0]const u8) usize {
+pub fn ctstrLen(src: [*]const u8) usize {
     var i: usize = 0;
     while (true) {
         if (src[i] == '\x00')
@@ -35,7 +35,7 @@ pub fn ctstrLen(src: [*:0]const u8) usize {
     return i;
 }
 
-pub fn cstrCopy(dest: [*:0]u8, size: usize, src: []const u8) void {
+pub fn cstrCopy(dest: [*]u8, size: usize, src: []const u8) void {
     var i: usize = 0;
     for (src) |v| {
         if (i == size)
