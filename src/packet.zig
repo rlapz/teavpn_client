@@ -71,9 +71,9 @@ pub const Packet = extern struct {
         pub const size = @sizeOf(Body);
     };
 
-    pub fn set(self: *Packet, code: Code, len: u16) void {
+    pub fn set(self: *Packet, code: Code, body_len: u16) void {
         self.code = code;
-        self.body_len = mem.nativeToBig(u16, len);
+        self.body_len = mem.nativeToBig(u16, body_len);
     }
 
     pub fn getBodyLen(self: *const Packet) u16 {
@@ -230,15 +230,37 @@ pub const Auth = extern struct {
 pub const AuthResp = extern struct {
     status: u8, // I'm not sure what is this
     __pad: u8,
-    iff: snet.Iff,
+    iff: Iff,
 
     pub const size = @sizeOf(AuthResp);
+
+    pub const Iff = extern struct {
+        // zig fmt: off
+        dev:          [snet.ifacenamesize]u8,
+        ipv4_pub:     [snet.inet4_addrstrlen]u8,
+        ipv4:         [snet.inet4_addrstrlen]u8,
+        ipv4_netmask: [snet.inet4_addrstrlen]u8,
+        ipv4_gateway: [snet.inet4_addrstrlen]u8,
+        ipv4_mtu:     u16,
+        // zig fmt: on
+
+        pub const size = @sizeOf(Iff);
+        comptime {
+            assert(@offsetOf(Iff, "dev") == 0);
+            assert(@offsetOf(Iff, "ipv4_pub") == 16);
+            assert(@offsetOf(Iff, "ipv4") == 32);
+            assert(@offsetOf(Iff, "ipv4_netmask") == 48);
+            assert(@offsetOf(Iff, "ipv4_gateway") == 64);
+            assert(@offsetOf(Iff, "ipv4_mtu") == 80);
+            assert(Iff.size == snet.ifacenamesize + (snet.inet4_addrstrlen * 4) + 2); // 82
+        }
+    };
 
     comptime {
         assert(@offsetOf(AuthResp, "status") == 0);
         assert(@offsetOf(AuthResp, "__pad") == 1);
         assert(@offsetOf(AuthResp, "iff") == 2);
-        assert(size == 1 + 1 + snet.Iff.size); // 84
+        assert(size == 1 + 1 + Iff.size); // 84
     }
 };
 

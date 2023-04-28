@@ -7,7 +7,7 @@ const os = std.os;
 const linux = os.linux;
 
 const impl = switch (builtin.os.tag) {
-    .linux => @import("linux/net.zig"),
+    .linux => @import("net/linux.zig"),
     else => @compileError("not supported os"),
 };
 pub const tun = impl.tun;
@@ -15,28 +15,6 @@ pub const spipe = impl.spipe;
 
 pub const ifacenamesize = 16;
 pub const inet4_addrstrlen = 16;
-
-pub const Iff = extern struct {
-    // zig fmt: off
-    dev:          [ifacenamesize]u8,
-    ipv4_pub:     [inet4_addrstrlen]u8,
-    ipv4:         [inet4_addrstrlen]u8,
-    ipv4_netmask: [inet4_addrstrlen]u8,
-    ipv4_gateway: [inet4_addrstrlen]u8,
-    ipv4_mtu:     u16,
-    // zig fmt: on
-
-    pub const size = @sizeOf(Iff);
-    comptime {
-        assert(@offsetOf(Iff, "dev") == 0);
-        assert(@offsetOf(Iff, "ipv4_pub") == 16);
-        assert(@offsetOf(Iff, "ipv4") == 32);
-        assert(@offsetOf(Iff, "ipv4_netmask") == 48);
-        assert(@offsetOf(Iff, "ipv4_gateway") == 64);
-        assert(@offsetOf(Iff, "ipv4_mtu") == 80);
-        assert(size == ifacenamesize + (inet4_addrstrlen * 4) + 2); // 82
-    }
-};
 
 //
 // UDP
@@ -75,10 +53,6 @@ pub const udp = struct {
         return os.recvfrom(fd, buffer, 0, null, null);
     }
 };
-
-test "Iff" {
-    _ = Iff;
-}
 
 test "udp.connect" {
     const fd = try udp.connect(std.testing.allocator, "127.0.0.1", 80);

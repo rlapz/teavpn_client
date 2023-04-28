@@ -7,7 +7,7 @@ const io = std.io;
 const os = std.os;
 
 const impl = switch (builtin.os.tag) {
-    .linux => @import("linux/util.zig"),
+    .linux => @import("util/linux.zig"),
     else => @compileError("not supported os"),
 };
 

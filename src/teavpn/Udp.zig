@@ -76,6 +76,15 @@ pub fn stop(self: *Udp) void {
 }
 
 // private
+fn udpSendPacket(self: *const Udp, body_len: usize) !usize {
+    const raw = self.packet.raw[0 .. Packet.header_size + body_len];
+    return snet.udp.sendTo(self.sock_fd, raw);
+}
+
+fn udpRecvPacket(self: *Udp) !usize {
+    return snet.udp.recvFrom(self.sock_fd, &self.packet.raw);
+}
+
 inline fn handleState(self: *Udp) !void {
     defer log.info("stopped!", .{});
 
@@ -237,7 +246,9 @@ fn authResponse(self: *Udp) !void {
                 break :brk;
             }
 
-            log.info("authentication success", .{});
+            log.info("authentication success: status: {}", .{
+                pkt.body.auth_resp.status,
+            });
 
             // success
             return;
@@ -259,13 +270,4 @@ fn authResponse(self: *Udp) !void {
 fn stateTunData(self: *Udp) State {
     _ = self;
     return .finish;
-}
-
-fn udpSendPacket(self: *const Udp, body_len: usize) !usize {
-    const raw = self.packet.raw[0 .. Packet.header_size + body_len];
-    return snet.udp.sendTo(self.sock_fd, raw);
-}
-
-fn udpRecvPacket(self: *Udp) !usize {
-    return snet.udp.recvFrom(self.sock_fd, &self.packet.raw);
 }
