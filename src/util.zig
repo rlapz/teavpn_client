@@ -75,6 +75,31 @@ pub const stdout = struct {
     }
 };
 
+pub const fsconf = struct {
+    // get a value from `key`
+    pub fn get(buffer: []const u8, key: []const u8) ?[]const u8 {
+        var start = mem.indexOf(u8, buffer, key) orelse
+            return null;
+
+        start += key.len;
+        if (start >= buffer.len)
+            return null;
+
+        if (buffer[start] != '(')
+            return null;
+
+        // skips '('
+        start += 1;
+
+        var end = mem.indexOf(u8, buffer[start..], ");\n") orelse
+            return null;
+
+        // get the real end index
+        end += start;
+        return mem.trim(u8, buffer[start..end], " ");
+    }
+};
+
 const expect = std.testing.expect;
 test "toUpper" {
     const str = "helloWorld";

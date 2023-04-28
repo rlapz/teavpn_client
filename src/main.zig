@@ -45,8 +45,9 @@ pub fn main() !void {
     var buffer = std.heap.FixedBufferAllocator.init(&real_buffer);
     const alloca = buffer.allocator();
 
-    var config = Config.init();
-    try config.load(alloca, "/home/hh/client.ini");
+    //var config = Config.init();
+    var config: Config = undefined;
+    try config.load("/home/hh/client.fc");
 
     log.info("Running...", .{});
     config.dump();
@@ -59,8 +60,9 @@ pub fn main() !void {
 
 const testing = std.testing;
 test "main" {
-    var config = Config.init();
-    try config.load(testing.allocator, "/home/hh/client.ini");
+    //var config = Config.init();
+    var config: Config = undefined;
+    try config.load("/home/hh/client.fc");
 
     config.dump();
 

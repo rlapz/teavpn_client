@@ -4,11 +4,11 @@ const fs = std.fs;
 const mem = std.mem;
 const log = std.log;
 
-const ini = @import("lib/ini/src/ini.zig");
 const packet = @import("packet.zig");
 const snet = @import("net.zig");
 const util = @import("util.zig");
 const stdout = util.stdout;
+const fsconf = util.fsconf;
 
 pub const version = struct {
     pub const major = 0;
@@ -17,8 +17,28 @@ pub const version = struct {
     pub const extra = "-rc1";
 };
 
+pub const default = struct {
+    pub const config_file = "~/.config/teavpn_client/config.fc";
+
+    pub const socket = struct {
+        pub const type_ = "UDP";
+        pub const use_encryption = "1"; // 0: false, >0 true
+        pub const server_addr = "127.0.0.1";
+        pub const server_port = "44444";
+    };
+
+    pub const iface = struct {
+        pub const override_default = "1"; // 0: false, >0 true
+        pub const dev = "tvpn0";
+    };
+
+    pub const auth = struct {
+        pub const username = "public_user";
+        pub const password = "public_user";
+    };
+};
+
 pub const buffer_size = 8192;
-pub const default_config_file = "~/.config/teavpn_client/config.ini";
 
 pub const Config = @This();
 sys: Sys,
@@ -121,35 +141,12 @@ pub const Auth = struct {
     }
 };
 
-// set default values
-pub fn init() Config {
-    var self: Config = undefined;
-    @memset(@ptrCast([*]u8, &self), 0, @sizeOf(Config));
-
-    const sys = &self.sys;
-    sys.queue_depth = 32;
-
-    const socket = &self.socket;
-    socket.type_ = .UDP;
-    socket.use_encryption = false;
-    socket.setServerAddr("127.0.0.1") catch
-        unreachable;
-    socket.server_port = 44444;
-
-    const iface = &self.iface;
-    iface.override_default = false;
-    iface.setDev("tvpn0") catch
-        unreachable;
-
-    return self;
-}
-
 // path: null -> use default file path
-pub fn load(self: *Config, allocator: mem.Allocator, path: ?[]const u8) !void {
+pub fn load(self: *Config, path: ?[]const u8) !void {
     const cfg = if (path != null)
         path.?
     else
-        default_config_file;
+        default.config_file;
 
     var file = fs.cwd().openFile(cfg, .{}) catch |err| {
         if (err == error.FileNotFound)
@@ -159,71 +156,53 @@ pub fn load(self: *Config, allocator: mem.Allocator, path: ?[]const u8) !void {
     };
     defer file.close();
 
-    return self.parse(allocator, &file);
+    var buffer: [buffer_size]u8 = undefined;
+    const sz = try file.readAll(&buffer);
+    return self.parse(buffer[0..sz]);
 }
 
-fn parse(self: *Config, allocator: mem.Allocator, file: *const fs.File) !void {
-    var parser = ini.parse(allocator, file.reader());
-    defer parser.deinit();
+fn parse(self: *Config, buff: []const u8) !void {
+    // socket_*
+    const sock = default.socket;
+    var val = fsconf.get(buff, "socket_type") orelse sock.type_;
+    self.socket.type_ = try Socket.Type.fromStr(val);
 
-    const sys = &self.sys;
-    const socket = &self.socket;
-    const iface = &self.iface;
-    const auth = &self.auth;
+    val = fsconf.get(buff, "socket_use_encryption") orelse sock.use_encryption;
+    if (try fmt.parseUnsigned(i32, val, 10) != 0)
+        self.socket.use_encryption = true
+    else
+        self.socket.use_encryption = false;
 
-    // TODO: carefully handle key-value in a section
-    while (try parser.next()) |p| {
-        switch (p) {
-            .property => |prop| {
-                const key = prop.key;
-                const val = prop.value;
+    val = fsconf.get(buff, "socket_server_addr") orelse sock.server_addr;
+    try self.socket.setServerAddr(val);
 
-                // sys
-                if (util.strCmp(key, "queue_depth"))
-                    sys.queue_depth = try fmt.parseUnsigned(u13, val, 10);
+    val = fsconf.get(buff, "socket_server_port") orelse sock.server_port;
+    self.socket.server_port = try fmt.parseUnsigned(u16, val, 10);
 
-                // socket
-                if (util.strCmp(key, "sock_type"))
-                    socket.type_ = try Socket.Type.fromStr(val);
+    // iface_*
+    const iface = default.iface;
+    val = fsconf.get(buff, "iface_override_default") orelse iface.override_default;
+    if (try fmt.parseUnsigned(i32, val, 10) != 0)
+        self.iface.override_default = true
+    else
+        self.iface.override_default = false;
 
-                if (util.strCmp(key, "use_encryption")) {
-                    const v = try fmt.parseUnsigned(i32, val, 10);
-                    socket.use_encryption = if (v != 0) true else false;
-                }
+    val = fsconf.get(buff, "iface_dev") orelse iface.dev;
+    try self.iface.setDev(val);
 
-                if (util.strCmp(key, "server_addr"))
-                    try socket.setServerAddr(val);
+    // auth_*
+    const auth = default.auth;
+    val = fsconf.get(buff, "auth_username") orelse auth.username;
+    try self.auth.setUsername(val);
 
-                if (util.strCmp(key, "server_port"))
-                    socket.server_port = try fmt.parseUnsigned(u16, val, 10);
-
-                // iface
-                if (util.strCmp(key, "override_default")) {
-                    const v = try fmt.parseUnsigned(i32, val, 10);
-                    iface.override_default = if (v != 0) true else false;
-                }
-
-                if (util.strCmp(key, "dev"))
-                    try iface.setDev(val);
-
-                // auth
-                if (util.strCmp(key, "username"))
-                    try auth.setUsername(val);
-
-                if (util.strCmp(key, "password"))
-                    try auth.setPassword(val);
-            },
-            else => {},
-        }
-    }
+    val = fsconf.get(buff, "auth_password") orelse auth.password;
+    try self.auth.setPassword(val);
 }
 
 pub fn dump(self: *Config) void {
     stdout.print(
         \\---------------------------------------------
         \\Config
-        \\|-> sys
-        \\|   `-> queue_depth:      {}
         \\|-> sock
         \\|   |-> type:             {s}
         \\|   |-> use_encryption:   {}
@@ -238,7 +217,6 @@ pub fn dump(self: *Config) void {
         \\
     ,
         .{
-            self.sys.queue_depth,
             self.socket.type_.toStr(),
             self.socket.use_encryption,
             self.socket.getServerAddr(),
