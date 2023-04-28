@@ -63,7 +63,7 @@ pub fn run(self: *Udp) !void {
     defer os.close(self.sock_fd);
 
     log.info("creating virtual network interface: {s}...", .{devn});
-    self.tun_fd = try snet.tun.create("/dev/net/tun", devn);
+    self.tun_fd = try snet.tun.create(cfg.socket.getTunPath(), devn);
     defer os.close(self.tun_fd);
 
     self.is_alive = true;

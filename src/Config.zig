@@ -21,6 +21,7 @@ pub const default = struct {
     pub const config_file = "~/.config/teavpn_client/config.fc";
 
     pub const socket = struct {
+        pub const tun_path = "/dev/net/tun";
         pub const type_ = "UDP";
         pub const use_encryption = "1"; // 0: false, >0 true
         pub const server_addr = "127.0.0.1";
@@ -52,11 +53,13 @@ pub const Sys = struct {
 };
 
 pub const Socket = struct {
+    tun_path: [tun_path_size]u8,
     type_: Type,
     use_encryption: bool,
     server_addr: [server_addr_size]u8,
     server_port: u16,
 
+    pub const tun_path_size = 256;
     pub const server_addr_size = 64;
     pub const Type = enum(u8) {
         UDP,
@@ -82,6 +85,13 @@ pub const Socket = struct {
         }
     };
 
+    pub fn setTunPath(self: *Socket, tun_path: []const u8) !void {
+        if (tun_path.len >= tun_path_size)
+            return error.TunPathTooLong;
+
+        return util.cstrCopy(&self.tun_path, tun_path_size, tun_path);
+    }
+
     pub fn setServerAddr(self: *Socket, addr: []const u8) !void {
         if (addr.len >= server_addr_size)
             return error.ServerAddrTooLong;
@@ -91,6 +101,10 @@ pub const Socket = struct {
 
     pub fn getServerAddr(self: *const Socket) []const u8 {
         return util.cstrToSlice(&self.server_addr, server_addr_size);
+    }
+
+    pub fn getTunPath(self: *const Socket) []const u8 {
+        return util.cstrToSlice(&self.tun_path, tun_path_size);
     }
 };
 
@@ -164,7 +178,10 @@ pub fn load(self: *Config, path: ?[]const u8) !void {
 fn parse(self: *Config, buff: []const u8) !void {
     // socket_*
     const sock = default.socket;
-    var val = fsconf.get(buff, "socket_type") orelse sock.type_;
+    var val = fsconf.get(buff, "socket_tun_path") orelse sock.tun_path;
+    try self.socket.setTunPath(val);
+
+    val = fsconf.get(buff, "socket_type") orelse sock.type_;
     self.socket.type_ = try Socket.Type.fromStr(val);
 
     val = fsconf.get(buff, "socket_use_encryption") orelse sock.use_encryption;
