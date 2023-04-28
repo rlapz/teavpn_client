@@ -63,8 +63,8 @@ pub fn run(self: *Udp) !void {
     defer os.close(self.sock_fd);
 
     log.info("creating virtual network interface: {s}...", .{devn});
-    //self.tun_fd = try snet.tun.create("/dev/net/tun", devn);
-    //defer os.close(self.tun_fd);
+    self.tun_fd = try snet.tun.create("/dev/net/tun", devn);
+    defer os.close(self.tun_fd);
 
     self.is_alive = true;
     return self.handleState();
@@ -91,13 +91,13 @@ inline fn handleState(self: *Udp) !void {
 }
 
 fn stateHandshake(self: *Udp) State {
-    const fd = self.sock_fd;
     const pkt = &self.packet.pkt;
     var buffer: [1024]u8 = undefined;
 
     log.info("sending `close` packet... (cleaning up stale connections)", .{});
     // send "close" packet, cleaning up stale connection(s)
-    var sz = pkt.set(.close, 0).udpSend(fd) catch |err| {
+    pkt.set(.close, 0);
+    var sz = self.udpSendPacket(0) catch |err| {
         log.err("failed to send `close` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -106,8 +106,6 @@ fn stateHandshake(self: *Udp) State {
 
     // send "handshake" packet
     const hnsk = &pkt.body.handshake;
-    @memset(@ptrCast([*]u8, hnsk), 0, Handshake.size);
-
     const vers = &hnsk.version;
     vers.major = ver.major;
     vers.patch = ver.patch;
@@ -120,7 +118,8 @@ fn stateHandshake(self: *Udp) State {
     log.info("request version: {s}", .{vers.toStr(&buffer)});
     log.info("sending `handshake` packet...", .{});
 
-    sz = pkt.set(.handshake, Handshake.size).udpSend(fd) catch |err| {
+    pkt.set(.handshake, Handshake.size);
+    sz = self.udpSendPacket(Handshake.size) catch |err| {
         log.err("failed to send `handshake` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -129,7 +128,7 @@ fn stateHandshake(self: *Udp) State {
 
     // recv "handshake" packet
     log.info("receiving `handshake` packet...", .{});
-    sz = pkt.udpRecv(fd) catch |err| {
+    sz = self.udpRecvPacket() catch |err| {
         log.err("failed to recv `handshake` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -191,7 +190,6 @@ fn handshakeResponse(self: *Udp) !void {
 }
 
 fn stateAuth(self: *Udp) State {
-    const fd = self.sock_fd;
     const pkt = &self.packet.pkt;
 
     // send "auth" packet
@@ -203,7 +201,8 @@ fn stateAuth(self: *Udp) State {
     };
 
     log.info("sending `auth` packet...", .{});
-    var sz = pkt.set(.auth, Auth.size).udpSend(fd) catch |err| {
+    pkt.set(.auth, Auth.size);
+    var sz = self.udpSendPacket(Auth.size) catch |err| {
         log.err("failed to send `auth` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -211,7 +210,7 @@ fn stateAuth(self: *Udp) State {
     log.info("sent bytes: {}", .{sz});
 
     log.info("receiving `auth` response packet...", .{});
-    sz = pkt.udpRecv(fd) catch |err| {
+    sz = self.udpRecvPacket() catch |err| {
         log.err("failed to recv `auth` packet: {s}", .{@errorName(err)});
         return .failed;
     };
@@ -260,4 +259,13 @@ fn authResponse(self: *Udp) !void {
 fn stateTunData(self: *Udp) State {
     _ = self;
     return .finish;
+}
+
+fn udpSendPacket(self: *const Udp, body_len: usize) !usize {
+    const raw = self.packet.raw[0 .. Packet.header_size + body_len];
+    return snet.udp.sendTo(self.sock_fd, raw);
+}
+
+fn udpRecvPacket(self: *Udp) !usize {
+    return snet.udp.recvFrom(self.sock_fd, &self.packet.raw);
 }
