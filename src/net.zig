@@ -42,7 +42,7 @@ pub const Iff = extern struct {
 // UDP
 //
 pub const udp = struct {
-    pub fn connect(allocator: mem.Allocator, host: []const u8, port: u16) !os.fd_t {
+    pub fn connect(allocator: mem.Allocator, host: []const u8, port: u16) !os.socket_t {
         var addr_list = try net.getAddressList(allocator, host, port);
         defer addr_list.deinit();
 
@@ -67,11 +67,11 @@ pub const udp = struct {
         return error.ConnectionRefused;
     }
 
-    pub fn sendTo(fd: os.fd_t, buffer: []const u8) !usize {
+    pub fn sendTo(fd: os.socket_t, buffer: []const u8) !usize {
         return os.sendto(fd, buffer, 0, null, 0);
     }
 
-    pub fn recvFrom(fd: os.fd_t, buffer: []u8) !usize {
+    pub fn recvFrom(fd: os.socket_t, buffer: []u8) !usize {
         return os.recvfrom(fd, buffer, 0, null, null);
     }
 };

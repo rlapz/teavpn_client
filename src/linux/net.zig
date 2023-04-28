@@ -8,7 +8,7 @@ pub const tun = struct {
     const IFF_TUN = 0x0001;
     const IFF_NO_PI = 0x1000;
 
-    pub fn create(path: []const u8, name: []const u8) !os.fd_t {
+    pub fn create(path: []const u8, name: []const u8) !os.socket_t {
         if (name.len >= os.IFNAMESIZE)
             return error.TunNameTooLong;
 
