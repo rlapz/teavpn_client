@@ -69,15 +69,7 @@ pub const Packet = extern struct {
 
         pub const raw_size = 4096;
         pub const size = @sizeOf(Body);
-
-        pub fn clear(self: *Body) void {
-            @memset(@ptrCast([*]u8, self), 0, Body.size);
-        }
     };
-
-    pub fn clearHeader(self: *Packet) void {
-        @memset(@ptrCast([*]u8, self), 0, size);
-    }
 
     pub fn set(self: *Packet, code: Code, len: u16) void {
         self.code = code;

@@ -77,7 +77,6 @@ pub const Socket = struct {
 pub const Iface = struct {
     override_default: bool,
     dev: [dev_size - 1:0]u8,
-    iff: snet.Iff,
 
     pub const dev_size = snet.ifacenamesize;
     pub fn setDev(self: *Iface, name: []const u8) !void {

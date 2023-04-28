@@ -61,9 +61,6 @@ pub fn run(self: *Udp) !void {
     //self.tun_fd = try snet.tun.create("/dev/net/tun", devn);
     //defer os.close(self.tun_fd);
 
-    self.packet.pkt.clearHeader();
-    self.packet.pkt.body.clear();
-
     self.is_alive = true;
     return self.handleState();
 }
@@ -74,7 +71,7 @@ pub fn stop(self: *Udp) void {
 }
 
 // private
-fn handleState(self: *Udp) !void {
+inline fn handleState(self: *Udp) !void {
     defer log.info("stopped!", .{});
 
     while (self.is_alive) {
@@ -92,7 +89,6 @@ fn stateHandshake(self: *Udp) State {
     log.info("preparing handshake packet...", .{});
     const pkt = &self.packet.pkt;
     const raw = &self.packet.raw;
-    const body = &pkt.body;
     var buffer: [1024]u8 = undefined;
 
     // send "close" packet, cleaning up stale connection(s)
@@ -105,7 +101,7 @@ fn stateHandshake(self: *Udp) State {
     log.info("sent bytes: {}", .{sz});
 
     // send "handshake" packet
-    const hnsk = &body.handshake;
+    const hnsk = &pkt.body.handshake;
     const vers = &hnsk.version;
     vers.major = ver.major;
     vers.patch = ver.patch;
@@ -145,8 +141,7 @@ fn stateHandshake(self: *Udp) State {
 
 fn handshakeResponse(self: *Udp) !void {
     const pkt = &self.packet.pkt;
-    const body = &pkt.body;
-    const hnsk = &body.handshake;
+    const hnsk = &pkt.body.handshake;
     var buffer: [1024]u8 = undefined;
 
     switch (pkt.code) {
@@ -177,7 +172,7 @@ fn handshakeResponse(self: *Udp) !void {
         },
         .handshake_reject => {
             log.err("server rejected the handshake request: {s}", .{
-                body.handshake_reject.toStr(&buffer),
+                pkt.body.handshake_reject.toStr(&buffer),
             });
             return error.HandshakeRejected;
         },
