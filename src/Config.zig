@@ -9,6 +9,10 @@ const snet = @import("net.zig");
 const util = @import("util.zig");
 const stdout = util.stdout;
 const fsconf = util.fsconf;
+const cstr = util.cstr;
+const str = util.str;
+
+pub const thread_max = 128;
 
 pub const version = struct {
     pub const major = 0;
@@ -20,16 +24,20 @@ pub const version = struct {
 pub const default = struct {
     pub const config_file = "~/.config/teavpn_client/config.fc";
 
+    pub const sys = struct {
+        pub const auto_reconnect = "1"; // 0: false, ~0 true
+    };
+
     pub const socket = struct {
-        pub const tun_path = "/dev/net/tun";
         pub const type_ = "UDP";
-        pub const use_encryption = "1"; // 0: false, >0 true
+        pub const use_encryption = "1"; // 0: false, ~0 true
         pub const server_addr = "127.0.0.1";
         pub const server_port = "44444";
     };
 
     pub const iface = struct {
-        pub const override_default = "1"; // 0: false, >0 true
+        pub const override_default = "1"; // 0: false, ~0 true
+        pub const tun_path = "/dev/net/tun";
         pub const dev = "tvpn0";
     };
 
@@ -39,8 +47,6 @@ pub const default = struct {
     };
 };
 
-pub const buffer_size = 8192;
-
 pub const Config = @This();
 sys: Sys,
 socket: Socket,
@@ -49,17 +55,15 @@ auth: Auth,
 //////
 
 pub const Sys = struct {
-    queue_depth: u13,
+    auto_reconnect: bool,
 };
 
 pub const Socket = struct {
-    tun_path: [tun_path_size]u8,
     type_: Type,
     use_encryption: bool,
     server_addr: [server_addr_size]u8,
     server_port: u16,
 
-    pub const tun_path_size = 256;
     pub const server_addr_size = 64;
     pub const Type = enum(u8) {
         UDP,
@@ -72,56 +76,55 @@ pub const Socket = struct {
             };
         }
 
-        pub fn fromStr(str: []const u8) !Type {
+        pub fn fromStr(_str: []const u8) !Type {
             var buff: [32]u8 = undefined;
-            if (str.len >= @sizeOf(@TypeOf(buff)))
-                return error.SocketTypeTooLong;
-
-            const _str = util.strToUpper(&buff, str);
-            if (util.strCmp(_str, Type.UDP.toStr()))
+            const upper = str.toUpper(&buff, _str);
+            if (mem.eql(u8, upper, Type.UDP.toStr()))
                 return .UDP;
 
-            return error.SocketTypeInvalid;
+            return error.SocketTypeUnknown;
         }
     };
-
-    pub fn setTunPath(self: *Socket, tun_path: []const u8) !void {
-        if (tun_path.len >= tun_path_size)
-            return error.TunPathTooLong;
-
-        return util.cstrCopy(&self.tun_path, tun_path_size, tun_path);
-    }
 
     pub fn setServerAddr(self: *Socket, addr: []const u8) !void {
         if (addr.len >= server_addr_size)
             return error.ServerAddrTooLong;
 
-        return util.cstrCopy(&self.server_addr, server_addr_size, addr);
+        return cstr.copy(&self.server_addr, server_addr_size, addr);
     }
 
     pub fn getServerAddr(self: *const Socket) []const u8 {
-        return util.cstrToSlice(&self.server_addr, server_addr_size);
-    }
-
-    pub fn getTunPath(self: *const Socket) []const u8 {
-        return util.cstrToSlice(&self.tun_path, tun_path_size);
+        return cstr.toSlice(&self.server_addr, server_addr_size);
     }
 };
 
 pub const Iface = struct {
     override_default: bool,
+    tun_path: [tun_path_size]u8,
     dev: [dev_size]u8,
 
+    pub const tun_path_size = 256;
     pub const dev_size = snet.ifacenamesize;
+    pub fn setTunPath(self: *Iface, tun_path: []const u8) !void {
+        if (tun_path.len >= tun_path_size)
+            return error.TunPathTooLong;
+
+        return cstr.copy(&self.tun_path, tun_path_size, tun_path);
+    }
+
+    pub fn getTunPath(self: *const Iface) []const u8 {
+        return cstr.toSlice(&self.tun_path, tun_path_size);
+    }
+
     pub fn setDev(self: *Iface, name: []const u8) !void {
         if (name.len >= dev_size)
             return error.IfaceDevNameTooLong;
 
-        return util.cstrCopy(&self.dev, dev_size, name);
+        return cstr.copy(&self.dev, dev_size, name);
     }
 
     pub fn getDev(self: *const Iface) []const u8 {
-        return util.cstrToSlice(&self.dev, dev_size);
+        return cstr.toSlice(&self.dev, dev_size);
     }
 };
 
@@ -136,22 +139,22 @@ pub const Auth = struct {
         if (uname.len >= username_size)
             return error.AuthUsernameTooLong;
 
-        return util.cstrCopy(&self.username, username_size, uname);
+        return cstr.copy(&self.username, username_size, uname);
     }
 
     pub fn setPassword(self: *Auth, passw: []const u8) !void {
         if (passw.len >= password_size)
             return error.AuthPasswordTooLong;
 
-        return util.cstrCopy(&self.password, password_size, passw);
+        return cstr.copy(&self.password, password_size, passw);
     }
 
     pub fn getUsername(self: *const Auth) []const u8 {
-        return util.cstrToSlice(&self.username, username_size);
+        return cstr.toSlice(&self.username, username_size);
     }
 
     pub fn getPassword(self: *const Auth) []const u8 {
-        return util.cstrToSlice(&self.password, password_size);
+        return cstr.toSlice(&self.password, password_size);
     }
 };
 
@@ -170,22 +173,27 @@ pub fn load(self: *Config, path: ?[]const u8) !void {
     };
     defer file.close();
 
-    var buffer: [buffer_size]u8 = undefined;
+    var buffer: [4096]u8 = undefined;
     const sz = try file.readAll(&buffer);
     return self.parse(buffer[0..sz]);
 }
 
 fn parse(self: *Config, buff: []const u8) !void {
+    // sys_*
+    const sys = default.sys;
+    var val = fsconf.get(buff, "sys_auto_reconnect") orelse sys.auto_reconnect;
+    if (try fmt.parseInt(i32, val, 10) != 0)
+        self.sys.auto_reconnect = true
+    else
+        self.sys.auto_reconnect = false;
+
     // socket_*
     const sock = default.socket;
-    var val = fsconf.get(buff, "socket_tun_path") orelse sock.tun_path;
-    try self.socket.setTunPath(val);
-
     val = fsconf.get(buff, "socket_type") orelse sock.type_;
     self.socket.type_ = try Socket.Type.fromStr(val);
 
     val = fsconf.get(buff, "socket_use_encryption") orelse sock.use_encryption;
-    if (try fmt.parseUnsigned(i32, val, 10) != 0)
+    if (try fmt.parseInt(i32, val, 10) != 0)
         self.socket.use_encryption = true
     else
         self.socket.use_encryption = false;
@@ -199,10 +207,13 @@ fn parse(self: *Config, buff: []const u8) !void {
     // iface_*
     const iface = default.iface;
     val = fsconf.get(buff, "iface_override_default") orelse iface.override_default;
-    if (try fmt.parseUnsigned(i32, val, 10) != 0)
+    if (try fmt.parseInt(i32, val, 10) != 0)
         self.iface.override_default = true
     else
         self.iface.override_default = false;
+
+    val = fsconf.get(buff, "iface_tun_path") orelse iface.tun_path;
+    try self.iface.setTunPath(val);
 
     val = fsconf.get(buff, "iface_dev") orelse iface.dev;
     try self.iface.setDev(val);
@@ -218,8 +229,7 @@ fn parse(self: *Config, buff: []const u8) !void {
 
 pub fn dump(self: *Config) void {
     stdout.print(
-        \\---------------------------------------------
-        \\Config
+        \\[Config---------------------------------------
         \\|-> sock
         \\|   |-> type:             {s}
         \\|   |-> use_encryption:   {}
@@ -227,22 +237,18 @@ pub fn dump(self: *Config) void {
         \\|   `-> server_port:      {}
         \\|-> iface
         \\|   |-> override_default: {}
+        \\|   |-> tun_path:         {s}
         \\|   `-> dev:              {s}
         \\`-> auth
         \\    `-> username:         {s}
         \\---------------------------------------------
         \\
-    ,
-        .{
-            self.socket.type_.toStr(),
-            self.socket.use_encryption,
-            self.socket.getServerAddr(),
-            self.socket.server_port,
-            self.iface.override_default,
-            self.iface.getDev(),
-            self.auth.getUsername(),
-        },
-    );
+    , .{
+        self.socket.type_.toStr(),   self.socket.use_encryption,
+        self.socket.getServerAddr(), self.socket.server_port,
+        self.iface.override_default, self.iface.getTunPath(),
+        self.iface.getDev(),         self.auth.getUsername(),
+    });
 }
 
 test {

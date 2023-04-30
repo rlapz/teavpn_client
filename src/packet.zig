@@ -2,9 +2,12 @@ const std = @import("std");
 const assert = std.debug.assert;
 const fmt = std.fmt;
 const mem = std.mem;
+const os = std.os;
 
 const snet = @import("net.zig");
 const util = @import("util.zig");
+
+const cstr = util.cstr;
 
 //
 // Each packet should contains `size` property
@@ -26,13 +29,23 @@ const util = @import("util.zig");
 // Packet
 //
 pub const Packet = extern struct {
+    // header
     code: Code,
     __pad: u8,
     body_len: u16,
-    body: Body,
 
-    pub const header_size = @sizeOf(Code) + 1 + 2;
+    // body
+    body: extern union {
+        handshake: Handshake,
+        handshake_reject: HandshakeReject,
+        auth: Auth,
+        auth_resp: AuthResp,
+        raw: [body_size]u8,
+    },
+
     pub const size = @sizeOf(Packet);
+    pub const body_size = 4096;
+    pub const header_size = (size - body_size);
 
     pub const Code = enum(u8) {
         handshake,
@@ -60,24 +73,19 @@ pub const Packet = extern struct {
         }
     };
 
-    pub const Body = extern union {
-        handshake: Handshake,
-        handshake_reject: HandshakeReject,
-        auth: Auth,
-        auth_resp: AuthResp,
-        raw: [raw_size]u8,
-
-        pub const raw_size = 4096;
-        pub const size = @sizeOf(Body);
-    };
-
-    pub fn set(self: *Packet, code: Code, body_len: u16) void {
-        self.code = code;
-        self.body_len = mem.nativeToBig(u16, body_len);
+    // get body raw with body_len offset
+    pub fn getBodyRaw(self: *const Packet) []const u8 {
+        return self.body.raw[0..self.getBodyLen()];
     }
 
     pub fn getBodyLen(self: *const Packet) u16 {
         return mem.bigToNative(u16, self.body_len);
+    }
+
+    pub fn create(self: *Packet, code: Code, len: u16) []const u8 {
+        self.code = code;
+        self.body_len = mem.nativeToBig(u16, len);
+        return mem.asBytes(self)[0 .. header_size + len];
     }
 
     comptime {
@@ -85,7 +93,7 @@ pub const Packet = extern struct {
         assert(@offsetOf(Packet, "__pad") == 1);
         assert(@offsetOf(Packet, "body_len") == 2);
         assert(@offsetOf(Packet, "body") == 4);
-        assert(size == 1 + 1 + 2 + Body.raw_size); // 4100
+        assert(size == 1 + 1 + 2 + body_size); // 4100
     }
 };
 
@@ -108,15 +116,15 @@ pub const Handshake = extern struct {
         pub const extra_size = 29;
         pub const size = @sizeOf(Version);
 
-        pub fn setExtra(self: *Version, extra: []const u8) !void {
-            if (extra.len >= extra_size)
-                return error.VersionExtraTooLong;
-
-            return util.cstrCopy(&self.extra, extra_size, extra);
+        pub fn set(self: *Version, m: u8, p: u8, s: u8, e: []const u8) void {
+            self.major = m;
+            self.patch = p;
+            self.sub = s;
+            return cstr.copy(&self.extra, extra_size, e);
         }
 
         pub fn toStr(self: *const Version, buffer: []u8) []const u8 {
-            const extra = util.cstrToSlice(&self.extra, extra_size);
+            const extra = cstr.toSlice(&self.extra, extra_size);
             return fmt.bufPrint(
                 buffer,
                 "{}.{}.{}{s}",
@@ -150,8 +158,8 @@ pub const HandshakeReject = extern struct {
     reason: Reason,
     message: [message_len]u8,
 
-    pub const message_len = 511;
     pub const size = @sizeOf(HandshakeReject);
+    pub const message_len = 511;
 
     pub const Reason = enum(u8) {
         inval = (1 << 0), // invalid
@@ -168,7 +176,7 @@ pub const HandshakeReject = extern struct {
     };
 
     pub fn getMessage(self: *const HandshakeReject) []const u8 {
-        return util.cstrToSlice(&self.message, message_len);
+        return cstr.toSlice(&self.message, message_len);
     }
 
     pub fn toStr(self: *const HandshakeReject, buffer: []u8) []const u8 {
@@ -213,8 +221,8 @@ pub const Auth = extern struct {
         if (_len >= password_size)
             return error.AuthPasswordTooLong;
 
-        util.cstrCopy(&self.username, username_size, uname);
-        util.cstrCopy(&self.password, password_size, passw);
+        cstr.copy(&self.username, username_size, uname);
+        cstr.copy(&self.password, password_size, passw);
     }
 
     comptime {
@@ -230,37 +238,14 @@ pub const Auth = extern struct {
 pub const AuthResp = extern struct {
     status: u8, // I'm not sure what is this
     __pad: u8,
-    iff: Iff,
+    iff: snet.Iff,
 
     pub const size = @sizeOf(AuthResp);
-
-    pub const Iff = extern struct {
-        // zig fmt: off
-        dev:          [snet.ifacenamesize]u8,
-        ipv4_pub:     [snet.inet4_addrstrlen]u8,
-        ipv4:         [snet.inet4_addrstrlen]u8,
-        ipv4_netmask: [snet.inet4_addrstrlen]u8,
-        ipv4_gateway: [snet.inet4_addrstrlen]u8,
-        ipv4_mtu:     u16,
-        // zig fmt: on
-
-        pub const size = @sizeOf(Iff);
-        comptime {
-            assert(@offsetOf(Iff, "dev") == 0);
-            assert(@offsetOf(Iff, "ipv4_pub") == 16);
-            assert(@offsetOf(Iff, "ipv4") == 32);
-            assert(@offsetOf(Iff, "ipv4_netmask") == 48);
-            assert(@offsetOf(Iff, "ipv4_gateway") == 64);
-            assert(@offsetOf(Iff, "ipv4_mtu") == 80);
-            assert(Iff.size == snet.ifacenamesize + (snet.inet4_addrstrlen * 4) + 2); // 82
-        }
-    };
-
     comptime {
         assert(@offsetOf(AuthResp, "status") == 0);
         assert(@offsetOf(AuthResp, "__pad") == 1);
         assert(@offsetOf(AuthResp, "iff") == 2);
-        assert(size == 1 + 1 + Iff.size); // 84
+        assert(size == 1 + 1 + snet.Iff.size); // 84
     }
 };
 

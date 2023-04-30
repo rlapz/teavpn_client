@@ -17,3 +17,8 @@ pub fn setSignalHandler(handler: *const signalHandlerFn) !void {
     try os.sigaction(SIG.INT, &act, null);
     try os.sigaction(SIG.HUP, &act, null);
 }
+
+pub fn setNonBlockingFd(fd: os.fd_t) !void {
+    const fl = try os.fcntl(fd, os.F.GETFL, 0);
+    _ = try os.fcntl(fd, os.F.SETFL, fl | os.O.NONBLOCK);
+}

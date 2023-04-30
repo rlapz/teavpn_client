@@ -1,11 +1,13 @@
-socket_tun_path(/dev/net/tun);
-socket_type(UDP);
-socket_use_encryption(1);
-socket_server_addr(127.0.0.1);
-socket_server_port(8000);
+sys_auto_reconnect(1)
 
-iface_dev(tvpnc0);
-iface_override_default(1);
+socket_type(UDP)
+socket_use_encryption(1)
+socket_server_addr(127.0.0.1)
+socket_server_port(8000)
 
-auth_username(public_user);
-auth_password(public_user_password);
+iface_override_default(1)
+iface_tun_path(/dev/net/tun)
+iface_dev(tvpnc0)
+
+auth_username(public_user)
+auth_password(public_user_password)

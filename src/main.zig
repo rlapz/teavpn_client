@@ -17,7 +17,7 @@ fn help(app_name: [*:0]const u8) void {
         \\Usage: {s} [OPTIONS]
         \\Example:
         \\  {s}                  <- use default config file path, located in: {s}
-        \\  {s} -c ~/config.ini
+        \\  {s} -c ~/config.fc
         \\
     ,
         .{ Config.default_config_file, app_name, app_name },
