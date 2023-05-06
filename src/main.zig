@@ -2,6 +2,7 @@ const builtin = @import("builtin");
 const std = @import("std");
 const mem = std.mem;
 const log = std.log;
+const process = std.process;
 
 const teavpn = @import("teavpn.zig");
 const Config = @import("Config.zig");
@@ -9,18 +10,18 @@ const util = @import("util.zig");
 const stdout = util.stdout;
 
 var g_udp: *teavpn.Udp = undefined;
+var real_buffer: [1024 * 1024]u8 = undefined;
 
 fn help(app_name: [*:0]const u8) void {
     stdout.print(
         \\TeaVPN Client - Unofficial
         \\
-        \\Usage: {s} [OPTIONS]
+        \\Usage: {s} [CONFIG]
         \\Example:
-        \\  {s}                  <- use default config file path, located in: {s}
-        \\  {s} -c ~/config.fc
+        \\  {s} ~/config.fc
         \\
     ,
-        .{ Config.default_config_file, app_name, app_name },
+        .{ app_name, app_name },
     );
 }
 
@@ -41,33 +42,24 @@ fn signalHandler(sig: c_int) callconv(.C) void {
 }
 
 pub fn main() !void {
-    var real_buffer: [1024 * 1024]u8 = undefined;
     var buffer = std.heap.FixedBufferAllocator.init(&real_buffer);
     const alloca = buffer.allocator();
 
-    //var config = Config.init();
+    var args = try process.argsAlloc(alloca);
+    if (args.len != 2) {
+        help(args[0]);
+        return error.InvalidArgument;
+    }
+
     var config: Config = undefined;
-    try config.load("/home/hh/client.fc");
+    try config.load(args[1]);
 
     log.info("Running...", .{});
     config.dump();
 
+    buffer.reset();
     return switch (config.socket.type_) {
         .UDP => runUdp(alloca, &config),
         else => unreachable,
     };
-}
-
-const testing = std.testing;
-test "main" {
-    //var config = Config.init();
-    var config: Config = undefined;
-    try config.load("/home/hh/client.fc");
-
-    config.dump();
-
-    switch (config.socket.type_) {
-        .UDP => try runUdp(testing.allocator, &config),
-        else => unreachable,
-    }
 }
