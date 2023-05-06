@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
+
 const fmt = std.fmt;
 const mem = std.mem;
 const os = std.os;
@@ -20,12 +21,12 @@ const udp = snet.udp;
 const udp_idx = 0;
 const tun_idx = 1;
 
-// in milliseconds, default: 2 seconds
-const poll_timeout = 2000;
+// in milliseconds, default: 100 miliseconds
+const poll_timeout = 100;
 
 // send `reqsync` packet frequency,
 //  default: every `(reqsync_freq * poll_timeout)` miliseconds
-const sync_req_freq = 14; // starting from 0
+const sync_req_freq = 131; // starting from 0
 const sync_res_max_try = 4; // starting from 0
 
 //

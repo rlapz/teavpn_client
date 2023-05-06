@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const fmt = std.fmt;
 const fs = std.fs;
 const mem = std.mem;
@@ -7,12 +8,11 @@ const log = std.log;
 const packet = @import("packet.zig");
 const snet = @import("net.zig");
 const util = @import("util.zig");
+
 const stdout = util.stdout;
 const fsconf = util.fsconf;
 const cstr = util.cstr;
 const str = util.str;
-
-pub const thread_max = 128;
 
 pub const version = struct {
     pub const major = 0;

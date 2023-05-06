@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
+
 const assert = std.debug.assert;
 const mem = std.mem;
 const net = std.net;
@@ -9,6 +10,7 @@ const linux = os.linux;
 const util = @import("util.zig");
 
 const cstr = util.cstr;
+
 const impl = switch (builtin.os.tag) {
     .linux => @import("net/linux.zig"),
     else => @compileError("not supported os"),

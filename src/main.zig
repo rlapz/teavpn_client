@@ -1,5 +1,6 @@
 const builtin = @import("builtin");
 const std = @import("std");
+
 const mem = std.mem;
 const log = std.log;
 const process = std.process;
@@ -7,6 +8,7 @@ const process = std.process;
 const teavpn = @import("teavpn.zig");
 const Config = @import("Config.zig");
 const util = @import("util.zig");
+
 const stdout = util.stdout;
 
 var g_udp: *teavpn.Udp = undefined;
